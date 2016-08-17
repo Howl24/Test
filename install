@@ -3,7 +3,7 @@ sudo apt-get update
 sudo apt-get install git
 
 
-"Git testing string"
+"Git testing string 2"
 
 
 
