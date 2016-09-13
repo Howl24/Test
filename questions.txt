@@ -1,0 +1,7 @@
+Areas Funcionales:
+	1 Oferta -> 1 SubArea o 1 Oferta -> Muchas SubAreas
+
+
+
+
+	
