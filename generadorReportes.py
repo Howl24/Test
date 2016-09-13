@@ -24,7 +24,7 @@ class generadorReportes():
 		cluster=Cluster()
 		session = cluster.connect('btpucp')
 		self.areas_funcionales=list(session.execute("select * from areas_funcionales"))
-		self.reportes=session.execute("select * from reportes")
+		self.reportes=list(session.execute("select * from reportes"))
 
 
 		#self.especialidades=session.execute("select * from especialidades")
@@ -120,6 +120,9 @@ class generadorReportes():
 		elif nombReporte=='Softwares':
 			listaColumnas.append('Job: Software')
 			listaColumnas.append('Job: Qualifications')
+		elif nombReporte =='Blandas':
+			listaColumnas.append('Job: Description')
+			listaCOlumnas.append('Job: Qualifications')
 
 		return listaColumnas
 
@@ -169,12 +172,11 @@ class generadorReportes():
 
 		self.repAreasFuncionales()
 
-		#listaReportes=['Idiomas','Caracteristicas','Estudios','Responsabilidades','Cargos','Softwares']
+		listaReportes=['Idiomas','Caracteristicas','Estudios','Responsabilidades','Cargos','Softwares','Blandas','Competencias']
 		#self.reporte_Sectores_Economicos()
 
-		#for reporte in listaReportes:
-		#	conteoPalabras=self.reporte_Reportes(reporte)
-		#	self.escribir_Excel_Reportes(nombArchivo,reporte,conteoPalabras)
+		for nombReporte in listaReportes:
+			self.repOtros(nombReporte)
 
 		#conteo=self.reporteAreasFuncionales()
 		#print(conteo)
@@ -188,9 +190,64 @@ class generadorReportes():
 		#conteoPalabras=self.reporte_Reportes("Competencias")
 		#conteoPalabras=self.reporte_Reportes("Software")
 		
-#Otros
-	def reporte_Reportes(self,nombReporte):
 
+
+
+#SueldosxCargo
+	def repSueldosxCargo(self):
+		reporteEncontrado = None
+		for reporte in self.reportes:
+			if reporte.nombre == 'Cargos':
+				reporteEncontrado = reporte
+				break
+
+		conteoPalabras = {}
+		stemPalabras = {}
+		similares = {}
+
+		if reporteEncontrado.similares!=None:
+			similares = reporteEncontrado.similares
+		for palabra in reporteEncontrado.palabras:
+			conteoPalabras[palabra] = 0
+			stemPalabras[palabra] = [self.preprocesamiento(palabra)]
+			if palabra in similares.keys():
+				for similar in similares[palabra]:
+					stemPalabras[palabra].append(self.preprocesamiento(similar))
+
+
+		columnasAbuscar = self.reporte_Columnas('Cargos')
+		listaColumnas = []
+		for nombColumnas in columnasAbuscar:
+			listaColumnas.append(self.columnas[nombColumnas])
+
+
+		maxFilas=self.sheetAvisos.max_row+1
+		for numOferta in range(2,maxFilas):
+			text=''
+			for numColumn in listaColumnas:
+				text+=str(self.sheetAvisos.cell(row=numOferta,column=numColumn).value)
+				text+=' '
+			text=self.preprocesamiento(text)
+
+			for palabra in sorted(conteoPalabras.keys()):
+				for stemWord in stemPalabras[palabra]:
+					if self._find_word(text,stemWord):
+						conteoPalabras[palabra]+=1
+						break
+
+
+		
+			
+
+	
+
+
+
+
+
+
+#Otros
+	def repOtros(self,nombReporte):
 		reporteEncontrado=None
 		for reporte in self.reportes:
 			if reporte.nombre==nombReporte:
@@ -201,19 +258,15 @@ class generadorReportes():
 		stemPalabras={}
 		similares={}
 		if reporteEncontrado.similares!=None:
-			similares=reporteEncontrado.similares #si se usa el diccionario directamente del objeto extraido de la consulta en cassandra, se cae
+			similares=reporteEncontrado.similares
 		for palabra in reporteEncontrado.palabras:
 			conteoPalabras[palabra]=0
-			stemPalabras[palabra]=[self.preprocesamiento(palabra)] #se crea la lista de sinonimos ya 'stemmeados'
-			if palabra in similares.keys(): #si existe similares de esa palabra, se agregan a la lista
+			stemPalabras[palabra]=[self.preprocesamiento(palabra)] 
+			if palabra in similares.keys(): 
 				for similar in similares[palabra]:
 					stemPalabras[palabra].append(self.preprocesamiento(similar))
 
-		#print(conteoPalabras)
-		#print(stemPalabras)
-		columnasAbuscar=self.reporte_Columnas(nombReporte) #se buscan las columnas correspondientes segun el tipo de reporte
-
-		#Revisar si hay esas columnas en los diccionarios
+		columnasAbuscar=self.reporte_Columnas(nombReporte)
 		listaColumnas=[]
 		for nombColumnas in columnasAbuscar:
 			listaColumnas.append(self.columnas[nombColumnas])
@@ -224,28 +277,23 @@ class generadorReportes():
 			for numColumn in listaColumnas:
 				text+=str(self.sheetAvisos.cell(row=numOferta,column=numColumn).value)
 				text+=' '
-			#print(numOferta,text,"ANTES DE STEM")			
 			text=self.preprocesamiento(text)
-			#print(numOferta,text,"DESPUES DE STEM")
 
 			for palabra in sorted(conteoPalabras.keys()):
 				for stemWord in stemPalabras[palabra]:
 					if self._find_word(text,stemWord):
-						#print(text,stemWord)
 						conteoPalabras[palabra]+=1
-						#print(stemWord,"STEMWORD")
 						break
 
-		return conteoPalabras
+		self.excelOtros(conteoPalabras,nombReporte)
 
-	
-	def escribir_Excel_Reportes(self,nombArchivo,tipoReporte,conteoPalabras):
-		wb=openpyxl.Workbook()
-		sheet=wb.active
-		sheet['A1']=tipoReporte
-		sheet['B1']='Cantidad'
-		actualRow=2
-		conteoTotal=0
+	def excelOtros(self,nombReporte,conteoPalabras):
+		wb = openpyxl.Workbook()
+		sheet = wb.active
+		sheet['A1'] = nombReporte
+		sheet['B1'] = 'Cantidad'
+		actualRow = 2
+		conteoTotal = 0
 		for palabra in sorted(conteoPalabras.keys()):
 			sheet.cell(row=actualRow,column=1).value=palabra
 			sheet.cell(row=actualRow,column=2).value=conteoPalabras[palabra]
@@ -254,9 +302,8 @@ class generadorReportes():
 		sheet.cell(row=actualRow,column=1).value='Total'
 		sheet.cell(row=actualRow,column=2).value=conteoTotal
 
-			#print("%s: %d"%(palabra,conteoPalabras[palabra]))
-
 		wb.save(nombArchivo+'_'+tipoReporte+'_Reporte.xlsx')
+
 
 #Areas Funcionales
 	def repAreasFuncionales(self):
